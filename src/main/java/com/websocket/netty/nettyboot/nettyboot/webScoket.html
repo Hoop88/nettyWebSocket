@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>web socket 测试</title>
+</head>
+<body>
+
+<div style="width: 600px;height: 400px;">
+    <p>服务器输出:</p>
+    <div style="border: 1px solid #CCC;height: 300px;overflow: scroll" id="server-msg-container">
+
+    </div>
+    <p>
+        <textarea id="inp-msg" style="height: 50px;width: 500px"></textarea><input type="button" value="发送" id="send"><br/>
+        选择图片： <input type="file" id="send-pic">
+    </p>
+</div>
+
+<script type="application/javascript">
+    var ws = new WebSocket("ws://192.168.1.84:5555/chat");
+    ws.onopen = function (ev) {
+
+    };
+    ws.onmessage = function (ev) {
+        console.info("onmessage", ev);
+        var inpMsg = document.getElementById("server-msg-container");
+        if (typeof  ev.data === "string") {
+            inpMsg.innerHTML += ev.data + "<br/>";
+        } else {
+            var result = ev.data;
+            var flagReader = new FileReader();
+            flagReader.readAsArrayBuffer(result.slice(0, 4));
+            flagReader.onload = function (flag) {
+                if (new DataView(flag.target.result).getInt32(0) === 10) {
+                    var imageReader = new FileReader();
+                    imageReader.readAsDataURL(result.slice(4));
+                    imageReader.onload = function (img) {
+                        var imgHtml = "<img src='" + img.target.result + "' style='width: 100px;height: 100px;'>";
+                        inpMsg.innerHTML += imgHtml.replace("data:application/octet-stream;", "data:image/png;") + "<br />";
+                    }
+                } else {
+                    alert("后端返回的是非图片类型数据，无法显示。");
+                }
+            }
+        }
+    };
+    ws.onerror = function () {
+        var inpMsg = document.getElementById("server-msg-container");
+        inpMsg.innerHTML += "发生异常" + "<br/>";
+    };
+    ws.onclose = function () {
+        var inpMsg = document.getElementById("server-msg-container");
+        inpMsg.innerHTML += "webSocket 关闭" + "<br/>";
+    };
+
+    // 发送文字消息
+    document.getElementById("send").addEventListener("click", function () {
+        ws.send(document.getElementById("inp-msg").value);
+    }, false);
+
+    // 发送图片
+    document.querySelector('#send-pic').addEventListener('change', function (ev) {
+        var files = this.files;
+        if (files && files.length) {
+            var file = files[0];
+            var fileType = file.type;
+            // 表示传递的是 图片
+            var dataType = 10;
+            if (!/^image/.test(fileType)) {
+                // 表示传递的是 非图片
+                dataType = 20;
+            }
+            var fileReader = new FileReader();
+            fileReader.readAsArrayBuffer(file);
+            fileReader.onload = function (e) {
+                // 获取到文件对象
+                var result = e.target.result;
+                // 创建一个 4个 字节的数组缓冲区
+                var arrayBuffer = new ArrayBuffer(4);
+                var dataView = new DataView(arrayBuffer);
+                // 从第0个字节开始，写一个 int 类型的数据(dataType)，占4个字节
+                dataView.setInt32(0, dataType);
+                // 组装成 blob 对象
+                var blob = new Blob([arrayBuffer, result]);
+                // 发送到 webSocket 服务器端
+                ws.send(blob);
+            }
+        }
+    }, false);
+</script>
+
+</body>
+</html>
